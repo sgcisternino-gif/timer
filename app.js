@@ -217,7 +217,14 @@ entriesBody.addEventListener('click',event=>{const edit=event.target.closest('[d
 $('#filter-period').addEventListener('change',renderTable);
 addFritvalgControls();
 Object.keys(salaryRates).forEach(key=>{const id=key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),field=$('#'+id);if(field)field.addEventListener('change',()=>{const maximum=field.max===''?Infinity:Number(field.max);salaryRates={...salaryRates,[key]:field.type==='checkbox'?field.checked:Math.min(maximum,Math.max(0,Number(field.value)||0))};field.value=salaryRates[key];localStorage.setItem(SALARY_KEY,JSON.stringify(salaryRates));renderSalary();showToast('Dine løn- og skatteværdier er gemt')})});
-document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',()=>{const view=link.dataset.view;document.querySelector('.main-content').classList.toggle('salary-active',view==='salary');document.querySelectorAll('.nav-link').forEach(item=>item.classList.toggle('active',item===link));}));
+function syncNavigation() {
+  const salary=location.hash==='#lon';
+  document.querySelector('.main-content').classList.toggle('salary-active',salary);
+  document.querySelectorAll('.nav-link').forEach(link=>link.classList.toggle('active',link.hash===location.hash));
+}
+document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',syncNavigation));
+window.addEventListener('hashchange',syncNavigation);
+syncNavigation();
 
 $('#export-csv').addEventListener('click',()=>{if(!entries.length){showToast('Der er ingen registreringer at eksportere');return}const rows=[['Dato','Sagsnummer','Opgave','Start','Slut','Pause (min)','Timer','Aften','Nat','Lørdag','Søn/helligdag','OT 50%','OT 100%','Beredskabsdøgn','Udkald hverdag','Udkald søn/helligdag','Rejsedøgn','Noter'],...entries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.caseNumber,e.task,e.start,e.end,e.break,fmtHours(duration(e)),e.eveningHours,e.nightHours,e.saturdayHours,e.sundayHours,e.overtime50Hours,e.overtime100Hours,e.standbyDays,e.calloutHours,e.holidayCalloutHours,e.travelDays,e.notes])];const csv='\ufeff'+rows.map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=`timer-${dateKey(new Date())}.csv`;link.click();URL.revokeObjectURL(link.href);showToast('Din CSV-fil er klar')});
 addPayslipPanel();
