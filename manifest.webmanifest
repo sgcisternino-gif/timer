@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "Timer – tidsregistrering og lønoverblik",
+  "name": "Timer – løn og arbejdsregistrering",
   "short_name": "Timer",
-  "description": "Registrér arbejdstid og få overblik over timer og optjening.",
+  "description": "Registrér timer og få overblik over løn og tillæg.",
   "lang": "da-DK",
   "start_url": "./index.html",
   "scope": "./",
