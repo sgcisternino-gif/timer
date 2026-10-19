@@ -1,17 +1,19 @@
 # Timer
 
-En lille dansk webapp til personlig tidsregistrering. Registrér sagsnummer, opgave, start/slut, pause og noter; aften-, nat-, weekend- og helligdagstillæg beregnes automatisk ud fra dato og klokkeslæt. Registrér stadig beredskab, udkald og rejsedøgn særskilt. Overtid beregnes automatisk for timer over 37 i arbejdsugen, først med 50 % for de første tre timer og derefter 100 %. Se ugens timer, dagens fremdrift og månedens overblik. Lønsiden viser vejledende brutto- og nettoestimater og lader dig sammenligne med beløbene på lønsedlen. Data gemmes lokalt i browseren og kan eksporteres som CSV.
+En dansk webapp til tidsregistrering og lønoverblik. Registrér sagsnummer, opgave, start- og sluttid, pause og noter. Aften-, natte-, weekend- og helligdagstillæg beregnes ud fra dato og klokkeslæt, og ugentligt overarbejde beregnes automatisk over 37 timer. Beredskab, udkald og rejsedøgn kan registreres særskilt. Lønsiden viser vejledende beløb ud fra de satser, der er udfyldt i appen.
 
 ## Kom i gang
 
-Åbn `index.html` direkte i en moderne browser, eller servér mappen med en lokal webserver. Appen har ingen build-trin eller eksterne afhængigheder.
+Åbn `index.html` i en moderne browser. Appen kræver ingen build-trin.
 
 ## Brug på telefon
 
-Appen er klargjort som en installérbar webapp (PWA) og kan bruges offline efter første indlæsning. For at installere den på en telefon skal den først være udgivet på en HTTPS-adresse, f.eks. via GitHub Pages. Når adressen findes, kan den føjes til hjemmeskærmen fra Safari på iPhone eller installeres fra Chrome på Android. Registreringer gemmes fortsat lokalt på den enkelte enhed og synkroniseres ikke mellem telefon og computer.
+Appen kan installeres som webapp, når den udgives på en HTTPS-adresse. Vælg **Føj til hjemmeskærm** i Safari på iPhone eller **Installer app** i Chrome på Android. Data gemmes lokalt på den enkelte enhed og synkroniseres ikke automatisk mellem enheder.
+
+## Satser og beregninger
+
+Alle løn-, tillægs-, fritvalgs- og skatteværdier starter på 0. Udfyld de satser, der gælder for den relevante overenskomst, lokale aftale og lønseddel. Nettoestimatet er 0, indtil der er angivet mindst én skatteværdi. Estimatet er vejledende og erstatter ikke en lønseddel.
 
 ## Data
 
-Registreringer og lønsatser gemmes i browserens `localStorage` på den enhed og i den browser, hvor appen åbnes. Brug **Eksportér CSV** for at hente en kopi af registreringerne.
-
-Lønsiden starter med et vejledende satsgrundlag på 205,66 kr./time fra 15. marts 2026 i Skadeserviceoverenskomsten mellem 3F og DI samt dine tidligere oplyste tillægs- og udkaldssatser. Skatteestimatet starter med 43 % træk, 4.094 kr. månedsfradrag, 2 % egen pension og 8 % AM-bidrag. Fritvalg vises særskilt med en redigerbar startværdi på 10 %. Kontrollér og tilpas tallene til din aktuelle lønseddel, ansættelsesdato, anciennitet og eventuelle Recover-lokalaftale. Aften-, nat-, weekend- og helligdagstillæg beregnes automatisk ud fra vagtens dato og klokkeslæt; overarbejde regnes ud fra 37 timer pr. arbejdsuge. Nettoestimatet er vejledende og medregner ikke bl.a. ATP eller feriepenge. Rejsedøgn regnes som skattefri i estimatet som standard; kontrollér at betingelserne for skattefri godtgørelse er opfyldt.
+Registreringer, lønsatser og lønseddelsammenligninger gemmes i browserens lokale lager på den enhed, hvor appen bruges. De sendes ikke til en appdatabase og synkroniseres ikke mellem enheder. Brug **Eksportér CSV** for at hente en kopi af registreringerne.
