@@ -25,7 +25,8 @@ function loadSalaryRates() {
     const saved=JSON.parse(localStorage.getItem(SALARY_KEY)||'null');
     if(saved) return {...defaults,...saved};
     const previous=JSON.parse(localStorage.getItem('timer.salary.v1')||'{}');
-    return {...defaults,...previous,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0};
+    const hasConfiguredRates=[previous.baseRate,previous.localRate,previous.eveningRate,previous.nightRate,previous.saturdayRate,previous.sundayRate,previous.overtimeBase,previous.standbyRate,previous.calloutRate,previous.holidayCalloutRate,previous.travelDayRate].some(value=>Number(value)>0);
+    return hasConfiguredRates ? {...defaults,...previous,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0} : defaults;
   }
   catch { return defaults; }
 }
