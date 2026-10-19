@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'timer.entries.v1';
-const SALARY_KEY = 'timer.salary.v5';
+const SALARY_KEY = 'timer.salary.v6';
 const PAYCHECK_KEY = 'timer.payslip-checks.v1';
 const $ = (selector) => document.querySelector(selector);
 const entriesBody = $('#entries-body');
@@ -222,8 +222,13 @@ function syncNavigation() {
   document.querySelector('.main-content').classList.toggle('salary-active',salary);
   document.querySelectorAll('.nav-link').forEach(link=>link.classList.toggle('active',link.hash===location.hash));
 }
-document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',syncNavigation));
+document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',event=>{
+  event.preventDefault();
+  if(location.hash!==link.hash)history.pushState(null,'',link.hash);
+  syncNavigation();
+}));
 window.addEventListener('hashchange',syncNavigation);
+window.addEventListener('popstate',syncNavigation);
 syncNavigation();
 
 $('#export-csv').addEventListener('click',()=>{if(!entries.length){showToast('Der er ingen registreringer at eksportere');return}const rows=[['Dato','Sagsnummer','Opgave','Start','Slut','Pause (min)','Timer','Aften','Nat','Lørdag','Søn/helligdag','OT 50%','OT 100%','Beredskabsdøgn','Udkald hverdag','Udkald søn/helligdag','Rejsedøgn','Noter'],...entries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.caseNumber,e.task,e.start,e.end,e.break,fmtHours(duration(e)),e.eveningHours,e.nightHours,e.saturdayHours,e.sundayHours,e.overtime50Hours,e.overtime100Hours,e.standbyDays,e.calloutHours,e.holidayCalloutHours,e.travelDays,e.notes])];const csv='\ufeff'+rows.map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=`timer-${dateKey(new Date())}.csv`;link.click();URL.revokeObjectURL(link.href);showToast('Din CSV-fil er klar')});
