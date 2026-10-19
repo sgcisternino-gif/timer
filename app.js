@@ -198,7 +198,7 @@ function addFritvalgControls() {
   const panel=document.querySelector('.earnings-panel'),line=document.createElement('div');line.className='earnings-line';line.innerHTML='<span>Fritvalg opsparet i perioden (est.)</span><strong id="fritvalg-earned">0 kr.</strong>';panel.insertBefore(line,document.querySelector('.earnings-total'));
 }
 function openDialog(entry=null) {
-  form.reset(); $('#entry-id').value=entry?.id||''; $('#case-number').value=entry?.caseNumber||''; $('#task').value=entry?.task||''; $('#date').value=entry?.date||dateKey(new Date()); $('#break').value=entry?.break??30; $('#start').value=entry?.start||'07:00'; $('#end').value=entry?.end||'15:00'; $('#notes').value=entry?.notes||'';
+  form.reset(); $('#entry-id').value=entry?.id||''; $('#case-number').value=entry?.caseNumber||''; $('#task').value=entry?.task||''; $('#date').value=entry?.date||dateKey(new Date()); $('#break').value=entry?.break??30; $('#start').value=entry?.start||'07:00'; $('#end').value=entry?.end||'17:00'; $('#notes').value=entry?.notes||'';
   ['eveningHours','nightHours','saturdayHours','sundayHours','overtime50Hours','overtime100Hours','standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{const field=form.elements[name];if(field)field.value=entry?.[name]??0;});
   const cases=[...new Set(entries.map(item=>item.caseNumber?.trim()).filter(Boolean))];$('#case-number-history').innerHTML=cases.map(value=>`<option value="${escapeHtml(value)}"></option>`).join('');
   $('#repeat-last').hidden=Boolean(entry)||entries.length===0;
@@ -206,7 +206,7 @@ function openDialog(entry=null) {
   dialog.showModal(); setTimeout(()=>$('#task').focus(),40);
 }
 function showToast(message) { const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2300); }
-function copyLastEntryToForm() { const last=entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start))[0];if(!last)return false;$('#case-number').value=last.caseNumber||'';$('#task').value=last.task||'';$('#start').value=last.start||'07:00';$('#end').value=last.end||'15:00';$('#break').value=last.break??30;$('#notes').value=last.notes||'';['standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{if(form.elements[name])form.elements[name].value=last[name]??0});$('#date').value=dateKey(new Date());showToast('Sidste registrering kopieret – ret dato og detaljer efter behov');return true; }
+function copyLastEntryToForm() { const last=entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start))[0];if(!last)return false;$('#case-number').value=last.caseNumber||'';$('#task').value=last.task||'';$('#start').value=last.start||'07:00';$('#end').value=last.end||'17:00';$('#break').value=last.break??30;$('#notes').value=last.notes||'';['standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{if(form.elements[name])form.elements[name].value=last[name]??0});$('#date').value=dateKey(new Date());showToast('Sidste registrering kopieret – ret dato og detaljer efter behov');return true; }
 document.querySelectorAll('#new-entry,#quick-entry,#empty-entry').forEach(button=>button.addEventListener('click',()=>openDialog()));
 $('#repeat-last').addEventListener('click',copyLastEntryToForm);
 $('#repeat-entry').addEventListener('click',()=>{openDialog();copyLastEntryToForm()});
