@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'timer.entries.v1';
-const SALARY_KEY = 'timer.salary.v3';
+const SALARY_KEY = 'timer.salary.v4';
 const PAYCHECK_KEY = 'timer.payslip-checks.v1';
 const $ = (selector) => document.querySelector(selector);
 const entriesBody = $('#entries-body');
@@ -21,13 +21,7 @@ function loadEntries() {
 }
 function loadSalaryRates() {
   const defaults={baseRate:205.66,localRate:0,eveningRate:20,nightRate:27,saturdayRate:0,sundayRate:27,overtimeBase:174.5,standbyRate:350,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:156.25,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
-  try {
-    const saved=JSON.parse(localStorage.getItem(SALARY_KEY)||'null');
-    if(saved) return {...defaults,...saved};
-    const previous=JSON.parse(localStorage.getItem('timer.salary.v1')||'{}');
-    const hasConfiguredRates=[previous.baseRate,previous.localRate,previous.eveningRate,previous.nightRate,previous.saturdayRate,previous.sundayRate,previous.overtimeBase,previous.standbyRate,previous.calloutRate,previous.holidayCalloutRate,previous.travelDayRate].some(value=>Number(value)>0);
-    return hasConfiguredRates ? {...defaults,...previous,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0} : defaults;
-  }
+  try { return {...defaults,...JSON.parse(localStorage.getItem(SALARY_KEY)||'{}')}; }
   catch { return defaults; }
 }
 function loadPayslipChecks() { try { return JSON.parse(localStorage.getItem(PAYCHECK_KEY)||'{}')||{}; } catch { return {}; } }
