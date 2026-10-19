@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'timer.entries.v1';
-const SALARY_KEY = 'timer.salary.v7';
+const SALARY_KEY = 'timer.salary.v8';
 const PAYCHECK_KEY = 'timer.payslip-checks.v1';
 const $ = (selector) => document.querySelector(selector);
 const entriesBody = $('#entries-body');
@@ -20,7 +20,7 @@ function loadEntries() {
   } catch { return []; }
 }
 function loadSalaryRates() {
-  const defaults={baseRate:174.61,serviceRate:3.65,damageServiceRate:27.4,seniorityRate:0,qualificationRate:0,localRate:0,eveningRate:18.2,nightRate:23.7,saturdayRate:0,sundayRate:26.3,overtimeFirstRate:46.24,overtimeOtherRate:92.49,standbyRate:185.3,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:0,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
+  const defaults={baseRate:174.61,serviceRate:3.65,damageServiceRate:27.4,seniorityRate:0,qualificationRate:0,localRate:0,eveningRate:18.2,nightRate:23.7,saturdayRate:0,sundayRate:26.3,overtimeFirstRate:46.24,overtimeOtherRate:92.49,standbyRate:185.3,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:625,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
   try {
     const saved=JSON.parse(localStorage.getItem(SALARY_KEY)||'null');
     if(saved)return {...defaults,...saved};
