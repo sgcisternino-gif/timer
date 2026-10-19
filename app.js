@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'timer.entries.v1';
-const SALARY_KEY = 'timer.salary.v4';
+const SALARY_KEY = 'timer.salary.v5';
 const PAYCHECK_KEY = 'timer.payslip-checks.v1';
 const $ = (selector) => document.querySelector(selector);
 const entriesBody = $('#entries-body');
@@ -20,8 +20,13 @@ function loadEntries() {
   } catch { return []; }
 }
 function loadSalaryRates() {
-  const defaults={baseRate:205.66,localRate:0,eveningRate:20,nightRate:27,saturdayRate:0,sundayRate:27,overtimeBase:174.5,standbyRate:350,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:156.25,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
-  try { return {...defaults,...JSON.parse(localStorage.getItem(SALARY_KEY)||'{}')}; }
+  const defaults={baseRate:174.61,serviceRate:3.65,damageServiceRate:27.4,seniorityRate:0,qualificationRate:0,localRate:0,eveningRate:18.2,nightRate:23.7,saturdayRate:0,sundayRate:26.3,overtimeFirstRate:46.24,overtimeOtherRate:92.49,standbyRate:185.3,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:0,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
+  try {
+    const saved=JSON.parse(localStorage.getItem(SALARY_KEY)||'null');
+    if(saved)return {...defaults,...saved};
+    const previous=JSON.parse(localStorage.getItem('timer.salary.v4')||'{}');
+    return {...defaults,localRate:Number(previous.localRate)||0,saturdayRate:Number(previous.saturdayRate)||0,fritvalgRate:Number(previous.fritvalgRate)||10,taxRate:Number(previous.taxRate)||0,monthlyDeduction:Number(previous.monthlyDeduction)||0,pensionRate:Number(previous.pensionRate)||0,amRate:Number(previous.amRate)||0,travelTaxable:Boolean(previous.travelTaxable)};
+  }
   catch { return defaults; }
 }
 function loadPayslipChecks() { try { return JSON.parse(localStorage.getItem(PAYCHECK_KEY)||'{}')||{}; } catch { return {}; } }
@@ -32,6 +37,7 @@ function startOfWeek(date) { const d = new Date(date.getFullYear(),date.getMonth
 function endOfWeek(date) { const d = startOfWeek(date); d.setDate(d.getDate()+6); return d; }
 function duration(entry) { const [sh,sm] = entry.start.split(':').map(Number); const [eh,em] = entry.end.split(':').map(Number); let minutes = eh*60+em-sh*60-sm-Number(entry.break||0); if(minutes<0) minutes+=1440; return Math.max(minutes,0)/60; }
 function sum(list) { return list.reduce((total,item)=>total+duration(item),0); }
+function ordinaryHourlyRate() { return Math.max(0,Number(salaryRates.baseRate||0)-Number(salaryRates.localRate||0))+Number(salaryRates.localRate||0)+Number(salaryRates.serviceRate||0)+Number(salaryRates.damageServiceRate||0)+Number(salaryRates.seniorityRate||0)+Number(salaryRates.qualificationRate||0); }
 function overtimeForEntry(target,list=entries) {
   const weekStart=dateKey(startOfWeek(parseDate(target.date)));
   const ordered=list.filter(item=>dateKey(startOfWeek(parseDate(item.date)))===weekStart).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
@@ -45,7 +51,7 @@ function easterSunday(year) {
 }
 function isDanishPublicHoliday(date) {
   const year=date.getFullYear(),key=dateKey(date),easter=easterSunday(year),move=days=>{const d=new Date(easter);d.setDate(d.getDate()+days);return dateKey(d)};
-  return key===`${year}-01-01`||key===move(-3)||key===move(-2)||key===move(1)||key===move(39)||key===move(50)||key===`${year}-12-25`||key===`${year}-12-26`;
+  return key===`${year}-01-01`||key===move(-3)||key===move(-2)||key===move(1)||key===move(39)||key===move(50)||key===`${year}-12-24`||key===`${year}-12-25`||key===`${year}-12-26`;
 }
 function premiumHoursForEntry(entry) {
   const start=parseDate(entry.date),[startHour,startMinute]=entry.start.split(':').map(Number),[endHour,endMinute]=entry.end.split(':').map(Number);
@@ -56,7 +62,7 @@ function premiumHoursForEntry(entry) {
     if(hour>=18&&hour<22)hours.evening++;
     if(hour>=22||hour<5)hours.night++;
     if(day===6)hours.saturday++;
-    if(day===0||isDanishPublicHoliday(instant))hours.sunday++;
+    if(day===0||isDanishPublicHoliday(instant)||(instant.getMonth()===4&&instant.getDate()===1&&hour>=12))hours.sunday++;
   }
   const factor=spanMinutes?workedMinutes/spanMinutes:0;Object.keys(hours).forEach(key=>hours[key]=hours[key]/60*factor);return hours;
 }
@@ -65,6 +71,7 @@ function dateLabel(key, options={weekday:'short',day:'numeric',month:'short'}) {
 function escapeHtml(value='') { return String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function getWeekEntries(now=new Date()) { const start=dateKey(startOfWeek(now)), end=dateKey(endOfWeek(now)); return entries.filter(e=>e.date>=start&&e.date<=end); }
 function render() {
+  $('#repeat-entry').hidden=entries.length===0;
   entries.forEach(entry=>{const overtime=overtimeForEntry(entry),premium=premiumHoursForEntry(entry);entry.overtime50Hours=overtime.fifty;entry.overtime100Hours=overtime.hundred;entry.eveningHours=premium.evening;entry.nightHours=premium.night;entry.saturdayHours=premium.saturday;entry.sundayHours=premium.sunday;});
   const now=new Date(), today=dateKey(now), week=getWeekEntries(now), monthKey=today.slice(0,7), month=entries.filter(e=>e.date.startsWith(monthKey));
   $('#today-label').textContent=new Intl.DateTimeFormat('da-DK',{weekday:'long',day:'numeric',month:'long'}).format(now);
@@ -94,9 +101,9 @@ function getPayPeriodRange(now=new Date()) {
 function formatMoney(amount, decimals=0) { return amount.toLocaleString('da-DK',{minimumFractionDigits:decimals,maximumFractionDigits:decimals}); }
 function extraPay(entry) {
   const overtime=overtimeForEntry(entry),premium=premiumHoursForEntry(entry);
-  return premium.evening*salaryRates.eveningRate + premium.night*salaryRates.nightRate + premium.saturday*salaryRates.saturdayRate + premium.sunday*salaryRates.sundayRate + overtime.fifty*salaryRates.overtimeBase*.5 + overtime.hundred*salaryRates.overtimeBase + Number(entry.standbyDays||0)*salaryRates.standbyRate + Number(entry.calloutHours||0)*salaryRates.calloutRate + Number(entry.holidayCalloutHours||0)*salaryRates.holidayCalloutRate + Number(entry.travelDays||0)*salaryRates.travelDayRate;
+  return premium.evening*salaryRates.eveningRate + premium.night*salaryRates.nightRate + premium.saturday*salaryRates.saturdayRate + premium.sunday*salaryRates.sundayRate + overtime.fifty*salaryRates.overtimeFirstRate + overtime.hundred*salaryRates.overtimeOtherRate + Number(entry.standbyDays||0)*salaryRates.standbyRate + Number(entry.calloutHours||0)*salaryRates.calloutRate + Number(entry.holidayCalloutHours||0)*salaryRates.holidayCalloutRate + Number(entry.travelDays||0)*salaryRates.travelDayRate;
 }
-function entryPay(entry) { return duration(entry)*(Number(salaryRates.baseRate||0)+Number(salaryRates.localRate||0))+extraPay(entry); }
+function entryPay(entry) { return duration(entry)*ordinaryHourlyRate()+extraPay(entry); }
 function paySum(list) { return list.reduce((total,entry)=>total+entryPay(entry),0); }
 function travelPay(list) { return list.reduce((total,entry)=>total+Number(entry.travelDays||0)*Number(salaryRates.travelDayRate||0),0); }
 function estimateNet(list) {
@@ -107,7 +114,7 @@ function estimateNet(list) {
   return taxable-pension-am-taxableAfterAllowance*Number(salaryRates.taxRate||0)/100+travel;
 }
 function renderSalary(now=new Date()) {
-  const base=Number(salaryRates.baseRate)||0, local=Number(salaryRates.localRate)||0, hourly=base+local, today=dateKey(now);
+  const hourly=ordinaryHourlyRate(), today=dateKey(now);
   const range=getPayPeriodRange(now), currentPeriod=entries.filter(e=>e.date>=range.start&&e.date<=range.end), month=entries.filter(e=>e.date.startsWith(today.slice(0,7))), weekEntries=getWeekEntries(now), totalHours=sum(entries);
   const scopedEntries=earningsScope==='pay'?currentPeriod:earningsScope==='week'?weekEntries:entries;
   Object.entries(salaryRates).forEach(([key,value])=>{const field=$(`#${key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase())}`);if(field){if(field.type==='checkbox')field.checked=Boolean(value);else field.value=value;}});
@@ -121,7 +128,7 @@ function renderSalary(now=new Date()) {
   renderPayslipComparison(range.start,paySum(currentPeriod),estimateNet(currentPeriod));
   $('#month-earned-hours').textContent=`${fmtHours(sum(month))} timer registreret`;
   $('#total-earned-hours').textContent=`${fmtHours(totalHours)} timer registreret`;
-  $('#salary-hours').textContent=`${fmtHours(sum(scopedEntries))} t`; $('#effective-rate').textContent=`${formatMoney(sum(scopedEntries)*hourly)} kr.`; $('#extra-earnings').textContent=`${formatMoney(scopedEntries.reduce((total,entry)=>total+extraPay(entry),0))} kr.`; $('#earnings-total').textContent=`${formatMoney(paySum(scopedEntries))} kr.`;
+  $('#salary-hours').textContent=`${fmtHours(sum(scopedEntries))} t`; $('#effective-rate').textContent=`${formatMoney(hourly,2)} kr./t · ${formatMoney(sum(scopedEntries)*hourly)} kr.`; $('#extra-earnings').textContent=`${formatMoney(scopedEntries.reduce((total,entry)=>total+extraPay(entry),0))} kr.`; $('#earnings-total').textContent=`${formatMoney(paySum(scopedEntries))} kr.`;
   const fritvalgBase=Math.max(0,paySum(scopedEntries)-(salaryRates.travelTaxable?0:travelPay(scopedEntries)));
   $('#fritvalg-earned').textContent=`${formatMoney(fritvalgBase*Number(salaryRates.fritvalgRate||0)/100)} kr.`;
   renderPayrollBreakdown(currentPeriod,range);
@@ -134,13 +141,13 @@ function renderPayrollBreakdown(periodEntries,range) {
   const days=key=>periodEntries.reduce((total,entry)=>total+Number(entry[key]||0),0);
   const totalHours=sum(periodEntries);
   const rows=[
-    ['Almindelige arbejdstimer',totalHours,`${formatMoney(Number(salaryRates.baseRate||0)+Number(salaryRates.localRate||0),2)} kr./t`,totalHours*(Number(salaryRates.baseRate||0)+Number(salaryRates.localRate||0)),'timer'],
+    ['Grundløn og faste tillæg',totalHours,`${formatMoney(ordinaryHourlyRate(),2)} kr./t`,totalHours*ordinaryHourlyRate(),'timer'],
     ['Aften 18–22',premiums.evening,`${formatMoney(salaryRates.eveningRate,2)} kr./t`,premiums.evening*salaryRates.eveningRate,'timer'],
     ['Nat 22–05',premiums.night,`${formatMoney(salaryRates.nightRate,2)} kr./t`,premiums.night*salaryRates.nightRate,'timer'],
     ['Lørdag',premiums.saturday,`${formatMoney(salaryRates.saturdayRate,2)} kr./t`,premiums.saturday*salaryRates.saturdayRate,'timer'],
     ['Søndag / helligdag',premiums.sunday,`${formatMoney(salaryRates.sundayRate,2)} kr./t`,premiums.sunday*salaryRates.sundayRate,'timer'],
-    ['Overarbejde · 50 % (første 3 t)',overtime('fifty'),`${formatMoney(salaryRates.overtimeBase*.5,2)} kr./t`,overtime('fifty')*salaryRates.overtimeBase*.5,'timer'],
-    ['Overarbejde · 100 %',overtime('hundred'),`${formatMoney(salaryRates.overtimeBase,2)} kr./t`,overtime('hundred')*salaryRates.overtimeBase,'timer'],
+    ['Overarbejde · 50 % (første 3 t)',overtime('fifty'),`${formatMoney(salaryRates.overtimeFirstRate,2)} kr./t`,overtime('fifty')*salaryRates.overtimeFirstRate,'timer'],
+    ['Overarbejde · 100 %',overtime('hundred'),`${formatMoney(salaryRates.overtimeOtherRate,2)} kr./t`,overtime('hundred')*salaryRates.overtimeOtherRate,'timer'],
     ['Beredskab',days('standbyDays'),`${formatMoney(salaryRates.standbyRate,2)} kr./døgn`,days('standbyDays')*salaryRates.standbyRate,'døgn'],
     ['Udkald · hverdag',hours('calloutHours'),`${formatMoney(salaryRates.calloutRate,2)} kr./t`,hours('calloutHours')*salaryRates.calloutRate,'timer'],
     ['Udkald · søndag / helligdag',hours('holidayCalloutHours'),`${formatMoney(salaryRates.holidayCalloutRate,2)} kr./t`,hours('holidayCalloutHours')*salaryRates.holidayCalloutRate,'timer'],
@@ -191,7 +198,7 @@ function addFritvalgControls() {
   const panel=document.querySelector('.earnings-panel'),line=document.createElement('div');line.className='earnings-line';line.innerHTML='<span>Fritvalg opsparet i perioden (est.)</span><strong id="fritvalg-earned">0 kr.</strong>';panel.insertBefore(line,document.querySelector('.earnings-total'));
 }
 function openDialog(entry=null) {
-  form.reset(); $('#entry-id').value=entry?.id||''; $('#case-number').value=entry?.caseNumber||''; $('#task').value=entry?.task||''; $('#date').value=entry?.date||dateKey(new Date()); $('#break').value=entry?.break??30; $('#start').value=entry?.start||'09:00'; $('#end').value=entry?.end||'17:00'; $('#notes').value=entry?.notes||'';
+  form.reset(); $('#entry-id').value=entry?.id||''; $('#case-number').value=entry?.caseNumber||''; $('#task').value=entry?.task||''; $('#date').value=entry?.date||dateKey(new Date()); $('#break').value=entry?.break??30; $('#start').value=entry?.start||'07:00'; $('#end').value=entry?.end||'15:00'; $('#notes').value=entry?.notes||'';
   ['eveningHours','nightHours','saturdayHours','sundayHours','overtime50Hours','overtime100Hours','standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{const field=form.elements[name];if(field)field.value=entry?.[name]??0;});
   const cases=[...new Set(entries.map(item=>item.caseNumber?.trim()).filter(Boolean))];$('#case-number-history').innerHTML=cases.map(value=>`<option value="${escapeHtml(value)}"></option>`).join('');
   $('#repeat-last').hidden=Boolean(entry)||entries.length===0;
@@ -199,15 +206,17 @@ function openDialog(entry=null) {
   dialog.showModal(); setTimeout(()=>$('#task').focus(),40);
 }
 function showToast(message) { const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2300); }
+function copyLastEntryToForm() { const last=entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start))[0];if(!last)return false;$('#case-number').value=last.caseNumber||'';$('#task').value=last.task||'';$('#start').value=last.start||'07:00';$('#end').value=last.end||'15:00';$('#break').value=last.break??30;$('#notes').value=last.notes||'';['standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{if(form.elements[name])form.elements[name].value=last[name]??0});$('#date').value=dateKey(new Date());showToast('Sidste registrering kopieret – ret dato og detaljer efter behov');return true; }
 document.querySelectorAll('#new-entry,#quick-entry,#empty-entry').forEach(button=>button.addEventListener('click',()=>openDialog()));
-$('#repeat-last').addEventListener('click',()=>{const last=entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start))[0];if(!last)return;$('#case-number').value=last.caseNumber||'';$('#task').value=last.task||'';$('#start').value=last.start||'09:00';$('#end').value=last.end||'17:00';$('#break').value=last.break??30;$('#notes').value=last.notes||'';['eveningHours','nightHours','saturdayHours','sundayHours','overtime50Hours','overtime100Hours','standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{if(form.elements[name])form.elements[name].value=last[name]??0});$('#date').value=dateKey(new Date());showToast('Sidste indtastning er kopieret – ret dato og detaljer efter behov')});
+$('#repeat-last').addEventListener('click',copyLastEntryToForm);
+$('#repeat-entry').addEventListener('click',()=>{openDialog();copyLastEntryToForm()});
 $('#close-dialog').addEventListener('click',()=>dialog.close()); $('#cancel-dialog').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close()});
 form.addEventListener('submit',event=>{event.preventDefault();const values=Object.fromEntries(new FormData(form));const existingId=values.id;const entry={id:existingId||crypto.randomUUID(),caseNumber:values.caseNumber.trim(),task:values.task.trim(),date:values.date,start:values.start,end:values.end,break:Number(values.break||0),notes:values.notes.trim(),eveningHours:Number(values.eveningHours||0),nightHours:Number(values.nightHours||0),saturdayHours:Number(values.saturdayHours||0),sundayHours:Number(values.sundayHours||0),overtime50Hours:Number(values.overtime50Hours||0),overtime100Hours:Number(values.overtime100Hours||0),standbyDays:Number(values.standbyDays||0),calloutHours:Number(values.calloutHours||0),holidayCalloutHours:Number(values.holidayCalloutHours||0),travelDays:Number(values.travelDays||0)};if(duration(entry)<=0){showToast('Sluttid skal være efter starttid.');return}if(existingId)entries=entries.map(item=>item.id===existingId?entry:item);else entries.push(entry);saveEntries();render();dialog.close();showToast(existingId?'Registreringen er opdateret':'Timerne er registreret')});
 entriesBody.addEventListener('click',event=>{const edit=event.target.closest('[data-edit]'),remove=event.target.closest('[data-delete]');if(edit){const entry=entries.find(item=>item.id===edit.dataset.edit);if(entry)openDialog(entry)}if(remove){entries=entries.filter(item=>item.id!==remove.dataset.delete);saveEntries();render();showToast('Registreringen er slettet')}});
 $('#filter-period').addEventListener('change',renderTable);
 addFritvalgControls();
-Object.keys(salaryRates).forEach(key=>{const id=key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),field=$('#'+id);if(field)field.addEventListener('change',()=>{salaryRates={...salaryRates,[key]:field.type==='checkbox'?field.checked:Math.max(0,Number(field.value)||0)};localStorage.setItem(SALARY_KEY,JSON.stringify(salaryRates));renderSalary();showToast('Dine løn- og skatteværdier er gemt')})});
+Object.keys(salaryRates).forEach(key=>{const id=key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),field=$('#'+id);if(field)field.addEventListener('change',()=>{const maximum=field.max===''?Infinity:Number(field.max);salaryRates={...salaryRates,[key]:field.type==='checkbox'?field.checked:Math.min(maximum,Math.max(0,Number(field.value)||0))};field.value=salaryRates[key];localStorage.setItem(SALARY_KEY,JSON.stringify(salaryRates));renderSalary();showToast('Dine løn- og skatteværdier er gemt')})});
 document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',()=>{const view=link.dataset.view;document.querySelector('.main-content').classList.toggle('salary-active',view==='salary');document.querySelectorAll('.nav-link').forEach(item=>item.classList.toggle('active',item===link));}));
 
 $('#export-csv').addEventListener('click',()=>{if(!entries.length){showToast('Der er ingen registreringer at eksportere');return}const rows=[['Dato','Sagsnummer','Opgave','Start','Slut','Pause (min)','Timer','Aften','Nat','Lørdag','Søn/helligdag','OT 50%','OT 100%','Beredskabsdøgn','Udkald hverdag','Udkald søn/helligdag','Rejsedøgn','Noter'],...entries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.caseNumber,e.task,e.start,e.end,e.break,fmtHours(duration(e)),e.eveningHours,e.nightHours,e.saturdayHours,e.sundayHours,e.overtime50Hours,e.overtime100Hours,e.standbyDays,e.calloutHours,e.holidayCalloutHours,e.travelDays,e.notes])];const csv='\ufeff'+rows.map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=`timer-${dateKey(new Date())}.csv`;link.click();URL.revokeObjectURL(link.href);showToast('Din CSV-fil er klar')});
