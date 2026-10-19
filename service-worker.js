@@ -1,4 +1,4 @@
-const CACHE_NAME = 'timer-shell-v11';
+const CACHE_NAME = 'timer-shell-v12';
 const APP_FILES = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', event => {
