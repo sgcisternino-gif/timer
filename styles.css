@@ -66,3 +66,4 @@ body{color:var(--ink);background:var(--canvas)}
   .payslip-form{grid-template-columns:1fr}
   .payslip-form button{grid-column:auto;min-height:44px}
 }
+.row-actions .edit-action{padding:6px 9px;border:1px solid #dce9ef;border-radius:6px;background:#f3f8fb;color:#075d89;font-weight:700}.row-actions .edit-action:hover{background:#e7f3f9;color:#003b70}.row-actions button:focus-visible{outline:2px solid #1688b7;outline-offset:2px}
