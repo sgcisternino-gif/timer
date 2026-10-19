@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'timer.entries.v1';
-const SALARY_KEY = 'timer.salary.v2';
+const SALARY_KEY = 'timer.salary.v3';
 const PAYCHECK_KEY = 'timer.payslip-checks.v1';
 const $ = (selector) => document.querySelector(selector);
 const entriesBody = $('#entries-body');
@@ -20,8 +20,13 @@ function loadEntries() {
   } catch { return []; }
 }
 function loadSalaryRates() {
-  const defaults={baseRate:0,localRate:0,eveningRate:0,nightRate:0,saturdayRate:0,sundayRate:0,overtimeBase:0,standbyRate:0,calloutRate:0,holidayCalloutRate:0,travelDayRate:0,fritvalgRate:0,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
-  try { return {...defaults,...JSON.parse(localStorage.getItem(SALARY_KEY)||'{}')}; }
+  const defaults={baseRate:205.66,localRate:0,eveningRate:20,nightRate:27,saturdayRate:0,sundayRate:27,overtimeBase:174.5,standbyRate:350,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:156.25,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
+  try {
+    const saved=JSON.parse(localStorage.getItem(SALARY_KEY)||'null');
+    if(saved) return {...defaults,...saved};
+    const previous=JSON.parse(localStorage.getItem('timer.salary.v1')||'{}');
+    return {...defaults,...previous,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0};
+  }
   catch { return defaults; }
 }
 function loadPayslipChecks() { try { return JSON.parse(localStorage.getItem(PAYCHECK_KEY)||'{}')||{}; } catch { return {}; } }
@@ -187,7 +192,7 @@ function addPayslipPanel() {
 }
 function addFritvalgControls() {
   const taxRates=document.querySelector('.tax-fields .rate-fields'),label=document.createElement('label');
-  label.className='field-label';label.htmlFor='fritvalg-rate';label.innerHTML='Fritvalg opsparing (%)<input class="field-input" type="number" id="fritvalg-rate" min="0" max="100" step="0.1" value="0">';taxRates.append(label);
+  label.className='field-label';label.htmlFor='fritvalg-rate';label.innerHTML='Fritvalg opsparing (%)<input class="field-input" type="number" id="fritvalg-rate" min="0" max="100" step="0.1" value="10">';taxRates.append(label);
   const panel=document.querySelector('.earnings-panel'),line=document.createElement('div');line.className='earnings-line';line.innerHTML='<span>Fritvalg opsparet i perioden (est.)</span><strong id="fritvalg-earned">0 kr.</strong>';panel.insertBefore(line,document.querySelector('.earnings-total'));
 }
 function openDialog(entry=null) {
@@ -207,7 +212,7 @@ form.addEventListener('submit',event=>{event.preventDefault();const values=Objec
 entriesBody.addEventListener('click',event=>{const edit=event.target.closest('[data-edit]'),remove=event.target.closest('[data-delete]');if(edit){const entry=entries.find(item=>item.id===edit.dataset.edit);if(entry)openDialog(entry)}if(remove){entries=entries.filter(item=>item.id!==remove.dataset.delete);saveEntries();render();showToast('Registreringen er slettet')}});
 $('#filter-period').addEventListener('change',renderTable);
 addFritvalgControls();
-Object.keys(salaryRates).forEach(key=>{const id=key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),field=$('#'+id);if(field)field.addEventListener('change',()=>{salaryRates={...salaryRates,[key]:field.type==='checkbox'?field.checked:Math.max(0,Number(field.value)||0)};localStorage.setItem(SALARY_KEY,JSON.stringify(salaryRates));renderSalary();showToast('Satserne er gemt')})});
+Object.keys(salaryRates).forEach(key=>{const id=key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),field=$('#'+id);if(field)field.addEventListener('change',()=>{salaryRates={...salaryRates,[key]:field.type==='checkbox'?field.checked:Math.max(0,Number(field.value)||0)};localStorage.setItem(SALARY_KEY,JSON.stringify(salaryRates));renderSalary();showToast('Dine løn- og skatteværdier er gemt')})});
 document.querySelectorAll('.nav-link').forEach(link=>link.addEventListener('click',()=>{const view=link.dataset.view;document.querySelector('.main-content').classList.toggle('salary-active',view==='salary');document.querySelectorAll('.nav-link').forEach(item=>item.classList.toggle('active',item===link));}));
 
 $('#export-csv').addEventListener('click',()=>{if(!entries.length){showToast('Der er ingen registreringer at eksportere');return}const rows=[['Dato','Sagsnummer','Opgave','Start','Slut','Pause (min)','Timer','Aften','Nat','Lørdag','Søn/helligdag','OT 50%','OT 100%','Beredskabsdøgn','Udkald hverdag','Udkald søn/helligdag','Rejsedøgn','Noter'],...entries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.caseNumber,e.task,e.start,e.end,e.break,fmtHours(duration(e)),e.eveningHours,e.nightHours,e.saturdayHours,e.sundayHours,e.overtime50Hours,e.overtime100Hours,e.standbyDays,e.calloutHours,e.holidayCalloutHours,e.travelDays,e.notes])];const csv='\ufeff'+rows.map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=`timer-${dateKey(new Date())}.csv`;link.click();URL.revokeObjectURL(link.href);showToast('Din CSV-fil er klar')});
