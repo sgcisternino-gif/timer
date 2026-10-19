@@ -1,5 +1,5 @@
 const STORAGE_KEY = 'timer.entries.v1';
-const SALARY_KEY = 'timer.salary.v6';
+const SALARY_KEY = 'timer.salary.v7';
 const PAYCHECK_KEY = 'timer.payslip-checks.v1';
 const $ = (selector) => document.querySelector(selector);
 const entriesBody = $('#entries-body');
