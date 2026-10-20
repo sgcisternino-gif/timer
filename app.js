@@ -11,6 +11,7 @@ let salaryRates = loadSalaryRates();
 let payslipChecks = loadPayslipChecks();
 let payslipFormPeriod = null;
 let earningsScope = 'all';
+let historyAnchor = new Date();
 let toastTimer;
 
 function loadEntries() {
@@ -22,10 +23,11 @@ function loadEntries() {
 function loadSalaryRates() {
   const defaults={baseRate:174.61,serviceRate:3.65,damageServiceRate:27.4,seniorityRate:0,qualificationRate:0,localRate:0,eveningRate:18.2,nightRate:23.7,saturdayRate:0,sundayRate:26.3,overtimeFirstRate:46.24,overtimeOtherRate:92.49,standbyRate:185.3,calloutRate:156.14,holidayCalloutRate:173.51,travelDayRate:625,fritvalgRate:10,taxRate:0,monthlyDeduction:0,pensionRate:0,amRate:0,travelTaxable:false};
   try {
-    const saved=JSON.parse(localStorage.getItem(SALARY_KEY)||'null');
-    if(saved)return {...defaults,...saved};
-    const previous=JSON.parse(localStorage.getItem('timer.salary.v4')||'{}');
-    return {...defaults,localRate:Number(previous.localRate)||0,saturdayRate:Number(previous.saturdayRate)||0,fritvalgRate:Number(previous.fritvalgRate)||10,taxRate:Number(previous.taxRate)||0,monthlyDeduction:Number(previous.monthlyDeduction)||0,pensionRate:Number(previous.pensionRate)||0,amRate:Number(previous.amRate)||0,travelTaxable:Boolean(previous.travelTaxable)};
+    for(const key of [SALARY_KEY,'timer.salary.v7','timer.salary.v6','timer.salary.v5','timer.salary.v4']) {
+      const saved=JSON.parse(localStorage.getItem(key)||'null');
+      if(saved&&typeof saved==='object')return {...defaults,...saved};
+    }
+    return defaults;
   }
   catch { return defaults; }
 }
@@ -35,10 +37,11 @@ function dateKey(date) { return `${date.getFullYear()}-${String(date.getMonth()+
 function parseDate(value) { const [y,m,d] = value.split('-').map(Number); return new Date(y,m-1,d); }
 function startOfWeek(date) { const d = new Date(date.getFullYear(),date.getMonth(),date.getDate()); d.setDate(d.getDate() - ((d.getDay()+6)%7)); return d; }
 function endOfWeek(date) { const d = startOfWeek(date); d.setDate(d.getDate()+6); return d; }
-function duration(entry) { const [sh,sm] = entry.start.split(':').map(Number); const [eh,em] = entry.end.split(':').map(Number); let minutes = eh*60+em-sh*60-sm-Number(entry.break||0); if(minutes<0) minutes+=1440; return Math.max(minutes,0)/60; }
+function duration(entry) { const [sh,sm] = entry.start.split(':').map(Number); const [eh,em] = entry.end.split(':').map(Number); let minutes = eh*60+em-sh*60-sm-(entry.type==='transport'?0:Number(entry.break||0)); if(minutes<0) minutes+=1440; return Math.max(minutes,0)/60; }
 function sum(list) { return list.reduce((total,item)=>total+duration(item),0); }
 function ordinaryHourlyRate() { return Math.max(0,Number(salaryRates.baseRate||0)-Number(salaryRates.localRate||0))+Number(salaryRates.localRate||0)+Number(salaryRates.serviceRate||0)+Number(salaryRates.damageServiceRate||0)+Number(salaryRates.seniorityRate||0)+Number(salaryRates.qualificationRate||0); }
 function overtimeForEntry(target,list=entries) {
+  if(target.type==='transport') return {fifty:0,hundred:0};
   const weekStart=dateKey(startOfWeek(parseDate(target.date)));
   const ordered=list.filter(item=>dateKey(startOfWeek(parseDate(item.date)))===weekStart).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.start.localeCompare(b.start));
   let worked=0;
@@ -54,6 +57,7 @@ function isDanishPublicHoliday(date) {
   return key===`${year}-01-01`||key===move(-3)||key===move(-2)||key===move(1)||key===move(39)||key===move(50)||key===`${year}-12-24`||key===`${year}-12-25`||key===`${year}-12-26`;
 }
 function premiumHoursForEntry(entry) {
+  if(entry.type==='transport') return {evening:0,night:0,saturday:0,sunday:0};
   const start=parseDate(entry.date),[startHour,startMinute]=entry.start.split(':').map(Number),[endHour,endMinute]=entry.end.split(':').map(Number);
   start.setHours(startHour,startMinute,0,0);const end=new Date(start);end.setHours(endHour,endMinute,0,0);if(end<=start)end.setDate(end.getDate()+1);
   const spanMinutes=Math.max(0,(end-start)/60000),workedMinutes=Math.max(0,spanMinutes-Number(entry.break||0)),hours={evening:0,night:0,saturday:0,sunday:0};
@@ -100,14 +104,14 @@ function getPayPeriodRange(now=new Date()) {
 }
 function formatMoney(amount, decimals=0) { return amount.toLocaleString('da-DK',{minimumFractionDigits:decimals,maximumFractionDigits:decimals}); }
 function extraPay(entry) {
+  if(entry.type==='transport') return 0;
   const overtime=overtimeForEntry(entry),premium=premiumHoursForEntry(entry);
   return premium.evening*salaryRates.eveningRate + premium.night*salaryRates.nightRate + premium.saturday*salaryRates.saturdayRate + premium.sunday*salaryRates.sundayRate + overtime.fifty*salaryRates.overtimeFirstRate + overtime.hundred*salaryRates.overtimeOtherRate + Number(entry.standbyDays||0)*salaryRates.standbyRate + Number(entry.calloutHours||0)*salaryRates.calloutRate + Number(entry.holidayCalloutHours||0)*salaryRates.holidayCalloutRate + Number(entry.travelDays||0)*salaryRates.travelDayRate;
 }
-function entryPay(entry) { return duration(entry)*ordinaryHourlyRate()+extraPay(entry); }
+function entryPay(entry) { return duration(entry)*(entry.type==='transport'?Number(salaryRates.baseRate||0):ordinaryHourlyRate())+extraPay(entry); }
 function paySum(list) { return list.reduce((total,entry)=>total+entryPay(entry),0); }
 function travelPay(list) { return list.reduce((total,entry)=>total+Number(entry.travelDays||0)*Number(salaryRates.travelDayRate||0),0); }
 function estimateNet(list) {
-  if(![salaryRates.taxRate,salaryRates.monthlyDeduction,salaryRates.pensionRate,salaryRates.amRate].some(value=>Number(value)>0)) return 0;
   const gross=paySum(list), travel=salaryRates.travelTaxable?0:travelPay(list), taxable=Math.max(0,gross-travel);
   const pension=taxable*Number(salaryRates.pensionRate||0)/100, am=Math.max(0,taxable-pension)*Number(salaryRates.amRate||0)/100;
   const taxableAfterAllowance=Math.max(0,taxable-pension-am-Number(salaryRates.monthlyDeduction||0));
@@ -121,6 +125,7 @@ function renderSalary(now=new Date()) {
   $('#pay-earned').textContent=formatMoney(paySum(currentPeriod)); $('#month-earned').textContent=formatMoney(paySum(month)); $('#total-earned').textContent=formatMoney(paySum(entries));
   $('#pay-range-label').textContent=`${dateLabel(range.start,{day:'numeric',month:'short'})} – ${dateLabel(range.end,{day:'numeric',month:'short'})}`;
   $('#net-earned').textContent=`${formatMoney(estimateNet(currentPeriod))} kr.`;
+  $('#net-payday-label').textContent=`Estimeret udbetaling ${new Intl.DateTimeFormat('da-DK',{day:'numeric',month:'long'}).format(new Date(`${range.end}T00:00:00`).setDate(parseDate(range.end).getDate()+1))}`;
   const periodOt=currentPeriod.reduce((total,entry)=>{const overtime=overtimeForEntry(entry);return total+overtime.fifty+overtime.hundred;},0);
   $('#period-hours').textContent=`${fmtHours(sum(currentPeriod))} t`;
   $('#period-overtime').textContent=`${fmtHours(periodOt)} t`;
@@ -132,6 +137,7 @@ function renderSalary(now=new Date()) {
   const fritvalgBase=Math.max(0,paySum(scopedEntries)-(salaryRates.travelTaxable?0:travelPay(scopedEntries)));
   $('#fritvalg-earned').textContent=`${formatMoney(fritvalgBase*Number(salaryRates.fritvalgRate||0)/100)} kr.`;
   renderPayrollBreakdown(currentPeriod,range);
+  renderPeriodExplanation(currentPeriod,range);
   document.querySelectorAll('.earnings-tab').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.scope===earningsScope));});
 }
 function renderPayrollBreakdown(periodEntries,range) {
@@ -139,9 +145,10 @@ function renderPayrollBreakdown(periodEntries,range) {
   const hours=key=>periodEntries.reduce((total,entry)=>total+Number(entry[key]||0),0);
   const overtime=key=>periodEntries.reduce((total,entry)=>total+overtimeForEntry(entry)[key],0);
   const days=key=>periodEntries.reduce((total,entry)=>total+Number(entry[key]||0),0);
-  const totalHours=sum(periodEntries);
+  const totalHours=sum(periodEntries),workEntries=periodEntries.filter(entry=>entry.type!=='transport'),transportEntries=periodEntries.filter(entry=>entry.type==='transport'),workHours=sum(workEntries),transportHours=sum(transportEntries);
   const rows=[
-    ['Grundløn og faste tillæg',totalHours,`${formatMoney(ordinaryHourlyRate(),2)} kr./t`,totalHours*ordinaryHourlyRate(),'timer'],
+    ['Grundløn og faste tillæg',workHours,`${formatMoney(ordinaryHourlyRate(),2)} kr./t`,workHours*ordinaryHourlyRate(),'timer'],
+    ['Transporttid · grundløn uden tillæg',transportHours,`${formatMoney(salaryRates.baseRate,2)} kr./t`,transportHours*salaryRates.baseRate,'timer'],
     ['Aften 18–22',premiums.evening,`${formatMoney(salaryRates.eveningRate,2)} kr./t`,premiums.evening*salaryRates.eveningRate,'timer'],
     ['Nat 22–05',premiums.night,`${formatMoney(salaryRates.nightRate,2)} kr./t`,premiums.night*salaryRates.nightRate,'timer'],
     ['Lørdag',premiums.saturday,`${formatMoney(salaryRates.saturdayRate,2)} kr./t`,premiums.saturday*salaryRates.saturdayRate,'timer'],
@@ -158,9 +165,18 @@ function renderPayrollBreakdown(periodEntries,range) {
   panel.querySelector('tbody').innerHTML=rows.map(([label,qty,rate,amount,unit])=>`<tr><td>${label}</td><td>${fmtHours(qty)} ${unit}</td><td>${rate}</td><td>${formatMoney(amount)} kr.</td></tr>`).join('');
   panel.querySelector('.breakdown-total').textContent=`${formatMoney(paySum(periodEntries))} kr.`;
 }
+function renderPeriodExplanation(periodEntries,range) {
+  const target=$('#period-explanation-content');if(!target)return;
+  const workHours=sum(periodEntries.filter(entry=>entry.type!=='transport')),transportHours=sum(periodEntries.filter(entry=>entry.type==='transport'));
+  const overtime=periodEntries.reduce((total,entry)=>{const value=overtimeForEntry(entry);return total+value.fifty+value.hundred;},0);
+  const gross=paySum(periodEntries),net=estimateNet(periodEntries),travel=salaryRates.travelTaxable?0:travelPay(periodEntries);
+  const taxable=Math.max(0,gross-travel),pension=taxable*Number(salaryRates.pensionRate||0)/100,am=Math.max(0,taxable-pension)*Number(salaryRates.amRate||0)/100,tax=Math.max(0,taxable-pension-am-Number(salaryRates.monthlyDeduction||0))*Number(salaryRates.taxRate||0)/100;
+  const payday=new Date(`${range.end}T00:00:00`);payday.setDate(payday.getDate()+1);
+  target.innerHTML=`<p>Perioden løber fra <strong>${dateLabel(range.start,{day:'numeric',month:'long'})}</strong> til <strong>${dateLabel(range.end,{day:'numeric',month:'long'})}</strong>. Forventet løndag er <strong>${new Intl.DateTimeFormat('da-DK',{day:'numeric',month:'long'}).format(payday)}</strong>.</p><ul><li>${fmtHours(sum(periodEntries))} timer i alt: ${fmtHours(workHours)} almindelige timer og ${fmtHours(transportHours)} transporttimer.</li><li>Transporttid beregnes med grundlønnen på ${formatMoney(salaryRates.baseRate,2)} kr./time uden pausefradrag eller tillæg.</li><li>${fmtHours(overtime)} overarbejdstimer er beregnet efter den ugentlige grænse på 37 timer. Tillæg for aften, nat, lørdag og søn-/helligdage beregnes ud fra registreringernes tidspunkt.</li><li>Brutto optjent: ${formatMoney(gross)} kr. · Estimeret udbetaling: ${formatMoney(net)} kr.</li><li>Nettoestimatet trækker ${formatMoney(pension)} kr. i egen pension, ${formatMoney(am)} kr. i AM-bidrag og ${formatMoney(tax)} kr. i skat ud fra dine valgte indstillinger. Diæter uden for skattepligtig løn: ${formatMoney(travel)} kr.</li></ul><p class="estimate-note">Vejledende beregning ud fra registreringer og indtastede satser. Den faktiske lønseddel kan afvige.</p>`;
+}
 function addPayrollBreakdown() {
   const panel=document.createElement('section');panel.className='panel breakdown-panel';panel.id='payroll-breakdown';
-  panel.innerHTML='<div class="panel-header"><div><p class="eyebrow">OPDELT LØNNSOVERSIGT</p><h2>Timer, tillæg og overarbejde</h2></div><span class="week-pill breakdown-period"></span></div><p class="breakdown-caption">Mængder og vejledende beløb i denne lønningsperiode.</p><div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>TYPE</th><th>MÆNGDE</th><th>SATS</th><th>OPTJENT</th></tr></thead><tbody></tbody><tfoot><tr><th colspan="3">Brutto i perioden</th><th class="breakdown-total">0 kr.</th></tr></tfoot></table></div>';
+  panel.innerHTML='<div class="panel-header"><div><p class="eyebrow">OPDELT LØNNSOVERSIGT</p><h2>Timer, tillæg og overarbejde</h2></div><span class="week-pill breakdown-period"></span></div><p class="breakdown-caption">Mængder og vejledende beløb i denne lønningsperiode.</p><div class="breakdown-wrap"><table class="breakdown-table"><thead><tr><th>TYPE</th><th>MÆNGDE</th><th>SATS</th><th>OPTJENT</th></tr></thead><tbody></tbody><tfoot><tr><th colspan="3">Brutto i perioden</th><th class="breakdown-total">0 kr.</th></tr></tfoot></table></div><details class="period-explanation" id="pay-period-explanation"><summary>Hvorfor er lønnen beregnet sådan?</summary><div id="period-explanation-content"></div></details>';
   document.querySelector('.salary-view').insertBefore(panel,document.querySelector('.salary-grid'));
 }
 function addEarningsTabs() {
@@ -168,15 +184,29 @@ function addEarningsTabs() {
   [['all','I alt'],['pay','Lønperioden'],['week','Denne uge']].forEach(([scope,label])=>{const button=document.createElement('button');button.type='button';button.className='earnings-tab';button.dataset.scope=scope;button.textContent=label;button.setAttribute('aria-pressed',String(scope===earningsScope));button.addEventListener('click',()=>{earningsScope=scope;renderSalary();});tabs.append(button)});
   header.after(tabs);
 }
+function historyRange(filter,anchor=historyAnchor) {
+  if(filter==='week')return {start:dateKey(startOfWeek(anchor)),end:dateKey(endOfWeek(anchor))};
+  if(filter==='month')return {start:dateKey(new Date(anchor.getFullYear(),anchor.getMonth(),1)),end:dateKey(new Date(anchor.getFullYear(),anchor.getMonth()+1,0))};
+  if(filter==='pay-period')return getPayPeriodRange(anchor);
+  return null;
+}
+function shiftHistory(direction) {
+  const filter=$('#filter-period').value;if(filter==='all')return;
+  const candidate=new Date(historyAnchor);
+  if(filter==='week')candidate.setDate(candidate.getDate()+7*direction);
+  else if(filter==='month')candidate.setMonth(candidate.getMonth()+direction,1);
+  else {const range=historyRange(filter);candidate.setTime(parseDate(range.start).getTime());candidate.setMonth(candidate.getMonth()+direction);}
+  const latest=historyRange(filter,new Date()),next=historyRange(filter,candidate);
+  if(direction>0&&next.start>latest.start)return;
+  historyAnchor=candidate;renderTable();
+}
 function renderTable() {
-  const filter=$('#filter-period').value, now=new Date(), today=dateKey(now);
-  const period=filter==='week'
-    ? {start:dateKey(startOfWeek(now)),end:dateKey(endOfWeek(now))}
-    : filter==='month'
-      ? {start:`${today.slice(0,7)}-01`,end:dateKey(new Date(now.getFullYear(),now.getMonth()+1,0))}
-      : filter==='pay-period' ? getPayPeriodRange(now) : null;
+  const filter=$('#filter-period').value, now=new Date(), period=historyRange(filter);
+  const latest=historyRange(filter,now),isCurrent=!period||period.start===latest.start;
+  $('#history-label').textContent=filter==='all'?'Alle registreringer':isCurrent?(filter==='week'?'Denne arbejdsuge':filter==='month'?'Denne måned':'Denne lønperiode'):`${dateLabel(period.start,{day:'numeric',month:'short'})} – ${dateLabel(period.end,{day:'numeric',month:'short'})}`;
+  $('#history-prev').disabled=filter==='all';$('#history-next').disabled=filter==='all'||period.start>=latest.start;
   const visible=entries.filter(e=>!period||(e.date>=period.start&&e.date<=period.end)).sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start));
-  $('#entries-body').innerHTML=visible.map(entry=>{const premiumLabels=[['eveningHours','Aften'],['nightHours','Nat'],['saturdayHours','Lørdag'],['sundayHours','Søn/helligdag'],['overtime50Hours','OT 50%'],['overtime100Hours','OT 100%']].filter(([key])=>Number(entry[key]||0)>0).map(([key,label])=>`${label} ${fmtHours(Number(entry[key]))} t`);if(Number(entry.standbyDays||0))premiumLabels.push(`Beredskab ${entry.standbyDays} døgn`);return `<tr><td>${dateLabel(entry.date,{weekday:'short',day:'numeric',month:'short'})}</td><td><strong>${escapeHtml(entry.caseNumber||'—')}</strong></td><td><div class="task-name"><i class="task-dot"></i><div><strong>${escapeHtml(entry.task)}</strong>${premiumLabels.length?`<span class="task-notes">${premiumLabels.join(' · ')}</span>`:''}${entry.notes?`<span class="task-notes">${escapeHtml(entry.notes)}</span>`:''}</div></div></td><td>${escapeHtml(entry.start)} – ${escapeHtml(entry.end)}</td><td>${Number(entry.break||0)} min.</td><td class="hours-cell">${fmtHours(duration(entry))} t</td><td class="row-actions"><button type="button" class="edit-action" data-edit="${entry.id}" aria-label="Redigér ${escapeHtml(entry.task)}" title="Ret denne registrering">✎ <span>Redigér</span></button><button type="button" data-delete="${entry.id}" aria-label="Slet ${escapeHtml(entry.task)}">Slet</button></td></tr>`}).join('');
+  $('#entries-body').innerHTML=visible.map(entry=>{const transport=entry.type==='transport',premiumLabels=[['eveningHours','Aften'],['nightHours','Nat'],['saturdayHours','Lørdag'],['sundayHours','Søn/helligdag'],['overtime50Hours','OT 50%'],['overtime100Hours','OT 100%']].filter(([key])=>Number(entry[key]||0)>0).map(([key,label])=>`${label} ${fmtHours(Number(entry[key]))} t`);if(Number(entry.standbyDays||0))premiumLabels.push(`Beredskab ${entry.standbyDays} døgn`);return `<tr class="${transport?'transport-row':''}"><td>${dateLabel(entry.date,{weekday:'short',day:'numeric',month:'short'})}</td><td><strong>${escapeHtml(entry.caseNumber||'—')}</strong></td><td><div class="task-name"><i class="task-dot"></i><div><strong>${escapeHtml(entry.task)}</strong><span class="entry-kind-badge ${transport?'transport':''}">${transport?'Transporttid':'Arbejdstid'}</span>${premiumLabels.length?`<span class="task-notes">${premiumLabels.join(' · ')}</span>`:''}${entry.notes?`<span class="task-notes">${escapeHtml(entry.notes)}</span>`:''}</div></div></td><td>${escapeHtml(entry.start)} – ${escapeHtml(entry.end)}</td><td class="break-cell">${transport?'Ingen pause':`${Number(entry.break||0)} min. pause`}</td><td class="hours-cell">${fmtHours(duration(entry))} t</td><td class="row-actions"><button type="button" class="edit-action" data-edit="${entry.id}" aria-label="Redigér ${escapeHtml(entry.task)}" title="Ret denne registrering">✎ <span>Redigér</span></button><button type="button" data-delete="${entry.id}" aria-label="Slet ${escapeHtml(entry.task)}">Slet</button></td></tr>`}).join('');
   const empty=visible.length===0; $('#empty-state').classList.toggle('visible',empty); entriesBody.style.display=empty?'none':'';
   const rangeLabel=period?` · ${dateLabel(period.start,{day:'numeric',month:'short'})} – ${dateLabel(period.end,{day:'numeric',month:'short'})}`:'';
   $('#entries-summary').textContent=`${visible.length} ${visible.length===1?'registrering':'registreringer'} · ${fmtHours(sum(visible))} timer${rangeLabel}`;
@@ -198,7 +228,7 @@ function addFritvalgControls() {
   const panel=document.querySelector('.earnings-panel'),line=document.createElement('div');line.className='earnings-line';line.innerHTML='<span>Fritvalg opsparet i perioden (est.)</span><strong id="fritvalg-earned">0 kr.</strong>';panel.insertBefore(line,document.querySelector('.earnings-total'));
 }
 function openDialog(entry=null) {
-  form.reset(); $('#entry-id').value=entry?.id||''; $('#case-number').value=entry?.caseNumber||''; $('#task').value=entry?.task||''; $('#date').value=entry?.date||dateKey(new Date()); $('#break').value=entry?.break??30; $('#start').value=entry?.start||'07:00'; $('#end').value=entry?.end||'17:00'; $('#notes').value=entry?.notes||'';
+  form.reset(); $('#entry-id').value=entry?.id||''; $('#case-number').value=entry?.caseNumber||''; $('#task').value=entry?.task||''; $('#date').value=entry?.date||dateKey(new Date()); $('#break').value=entry?.break??30; $('#start').value=entry?.start||'07:00'; $('#end').value=entry?.end||'17:00'; $('#notes').value=entry?.notes||'';setEntryType(entry?.type||'work');
   ['eveningHours','nightHours','saturdayHours','sundayHours','overtime50Hours','overtime100Hours','standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{const field=form.elements[name];if(field)field.value=entry?.[name]??0;});
   const cases=[...new Set(entries.map(item=>item.caseNumber?.trim()).filter(Boolean))];$('#case-number-history').innerHTML=cases.map(value=>`<option value="${escapeHtml(value)}"></option>`).join('');
   $('#repeat-last').hidden=Boolean(entry)||entries.length===0;
@@ -206,15 +236,23 @@ function openDialog(entry=null) {
   dialog.showModal(); setTimeout(()=>$('#task').focus(),40);
 }
 function showToast(message) { const toast=$('#toast');toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),2300); }
-function copyLastEntryToForm() { const last=entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start))[0];if(!last)return false;$('#case-number').value=last.caseNumber||'';$('#task').value=last.task||'';$('#start').value=last.start||'07:00';$('#end').value=last.end||'17:00';$('#break').value=last.break??30;$('#notes').value=last.notes||'';['standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{if(form.elements[name])form.elements[name].value=last[name]??0});$('#date').value=dateKey(new Date());showToast('Sidste registrering kopieret – ret dato og detaljer efter behov');return true; }
+function setEntryType(type) { const previous=$('#entry-type').value,transport=type==='transport';$('#entry-type').value=transport?'transport':'work';$('#entry-work-mode').setAttribute('aria-pressed',String(!transport));$('#entry-transport-mode').setAttribute('aria-pressed',String(transport));$('.break-field').hidden=transport;$('.wage-inputs').hidden=transport;$('#transport-note').hidden=!transport;if(transport)$('#break').value=0;else if(previous==='transport'&&Number($('#break').value)===0)$('#break').value=30; }
+function copyLastEntryToForm() { const last=entries.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.start.localeCompare(a.start))[0];if(!last)return false;$('#case-number').value=last.caseNumber||'';$('#task').value=last.task||'';$('#start').value=last.start||'07:00';$('#end').value=last.end||'17:00';$('#break').value=last.break??30;$('#notes').value=last.notes||'';setEntryType(last.type||'work');['standbyDays','calloutHours','holidayCalloutHours','travelDays'].forEach(name=>{if(form.elements[name])form.elements[name].value=last[name]??0});$('#date').value=dateKey(new Date());showToast('Sidste registrering kopieret – ret dato og detaljer efter behov');return true; }
+$('#entry-work-mode').addEventListener('click',()=>setEntryType('work'));
+$('#entry-transport-mode').addEventListener('click',()=>setEntryType('transport'));
 document.querySelectorAll('#new-entry,#quick-entry,#empty-entry').forEach(button=>button.addEventListener('click',()=>openDialog()));
 $('#repeat-last').addEventListener('click',copyLastEntryToForm);
 $('#repeat-entry').addEventListener('click',()=>{openDialog();copyLastEntryToForm()});
 $('#close-dialog').addEventListener('click',()=>dialog.close()); $('#cancel-dialog').addEventListener('click',()=>dialog.close());
 dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close()});
-form.addEventListener('submit',event=>{event.preventDefault();const values=Object.fromEntries(new FormData(form));const existingId=values.id;const entry={id:existingId||crypto.randomUUID(),caseNumber:values.caseNumber.trim(),task:values.task.trim(),date:values.date,start:values.start,end:values.end,break:Number(values.break||0),notes:values.notes.trim(),eveningHours:Number(values.eveningHours||0),nightHours:Number(values.nightHours||0),saturdayHours:Number(values.saturdayHours||0),sundayHours:Number(values.sundayHours||0),overtime50Hours:Number(values.overtime50Hours||0),overtime100Hours:Number(values.overtime100Hours||0),standbyDays:Number(values.standbyDays||0),calloutHours:Number(values.calloutHours||0),holidayCalloutHours:Number(values.holidayCalloutHours||0),travelDays:Number(values.travelDays||0)};if(duration(entry)<=0){showToast('Sluttid skal være efter starttid.');return}if(existingId)entries=entries.map(item=>item.id===existingId?entry:item);else entries.push(entry);saveEntries();render();dialog.close();showToast(existingId?'Registreringen er opdateret':'Timerne er registreret')});
+form.addEventListener('submit',event=>{event.preventDefault();const values=Object.fromEntries(new FormData(form));const existingId=values.id,transport=values.type==='transport';const entry={id:existingId||crypto.randomUUID(),type:transport?'transport':'work',caseNumber:values.caseNumber.trim(),task:values.task.trim(),date:values.date,start:values.start,end:values.end,break:transport?0:Number(values.break||0),notes:values.notes.trim(),eveningHours:0,nightHours:0,saturdayHours:0,sundayHours:0,overtime50Hours:0,overtime100Hours:0,standbyDays:transport?0:Number(values.standbyDays||0),calloutHours:transport?0:Number(values.calloutHours||0),holidayCalloutHours:transport?0:Number(values.holidayCalloutHours||0),travelDays:transport?0:Number(values.travelDays||0)};if(duration(entry)<=0){showToast('Sluttid skal være efter starttid.');return}if(existingId)entries=entries.map(item=>item.id===existingId?entry:item);else entries.push(entry);saveEntries();render();dialog.close();showToast(existingId?'Registreringen er opdateret':'Timerne er registreret')});
 entriesBody.addEventListener('click',event=>{const edit=event.target.closest('[data-edit]'),remove=event.target.closest('[data-delete]');if(edit){const entry=entries.find(item=>item.id===edit.dataset.edit);if(entry)openDialog(entry)}if(remove){entries=entries.filter(item=>item.id!==remove.dataset.delete);saveEntries();render();showToast('Registreringen er slettet')}});
-$('#filter-period').addEventListener('change',renderTable);
+$('#filter-period').addEventListener('change',()=>{historyAnchor=new Date();renderTable()});
+$('#history-prev').addEventListener('click',()=>shiftHistory(-1));$('#history-next').addEventListener('click',()=>shiftHistory(1));
+let historyTouchStart=null;
+$('#registreringer').addEventListener('touchstart',event=>{if(event.target.closest('button,select,input,textarea'))return;const touch=event.changedTouches[0];historyTouchStart={x:touch.clientX,y:touch.clientY}},{passive:true});
+$('#registreringer').addEventListener('touchend',event=>{if(!historyTouchStart)return;const touch=event.changedTouches[0],dx=touch.clientX-historyTouchStart.x,dy=touch.clientY-historyTouchStart.y;historyTouchStart=null;if(Math.abs(dx)>65&&Math.abs(dy)<55)shiftHistory(dx<0?1:-1)},{passive:true});
+$('#open-pay-period').addEventListener('click',()=>{const details=$('#pay-period-explanation');details.open=true;$('#payroll-breakdown').scrollIntoView({behavior:'smooth',block:'start'})});
 addFritvalgControls();
 Object.keys(salaryRates).forEach(key=>{const id=key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase()),field=$('#'+id);if(field)field.addEventListener('change',()=>{const maximum=field.max===''?Infinity:Number(field.max);salaryRates={...salaryRates,[key]:field.type==='checkbox'?field.checked:Math.min(maximum,Math.max(0,Number(field.value)||0))};field.value=salaryRates[key];localStorage.setItem(SALARY_KEY,JSON.stringify(salaryRates));renderSalary();showToast('Dine løn- og skatteværdier er gemt')})});
 function syncNavigation() {
@@ -233,7 +271,7 @@ window.addEventListener('load',syncNavigation);
 window.addEventListener('pageshow',syncNavigation);
 syncNavigation();
 
-$('#export-csv').addEventListener('click',()=>{if(!entries.length){showToast('Der er ingen registreringer at eksportere');return}const rows=[['Dato','Sagsnummer','Opgave','Start','Slut','Pause (min)','Timer','Aften','Nat','Lørdag','Søn/helligdag','OT 50%','OT 100%','Beredskabsdøgn','Udkald hverdag','Udkald søn/helligdag','Rejsedøgn','Noter'],...entries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.caseNumber,e.task,e.start,e.end,e.break,fmtHours(duration(e)),e.eveningHours,e.nightHours,e.saturdayHours,e.sundayHours,e.overtime50Hours,e.overtime100Hours,e.standbyDays,e.calloutHours,e.holidayCalloutHours,e.travelDays,e.notes])];const csv='\ufeff'+rows.map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=`timer-${dateKey(new Date())}.csv`;link.click();URL.revokeObjectURL(link.href);showToast('Din CSV-fil er klar')});
+$('#export-csv').addEventListener('click',()=>{if(!entries.length){showToast('Der er ingen registreringer at eksportere');return}const rows=[['Dato','Type','Sagsnummer','Opgave','Start','Slut','Pause (min)','Timer','Aften','Nat','Lørdag','Søn/helligdag','OT 50%','OT 100%','Beredskabsdøgn','Udkald hverdag','Udkald søn/helligdag','Rejsedøgn','Noter'],...entries.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(e=>[e.date,e.type==='transport'?'Transport':'Arbejdstid',e.caseNumber,e.task,e.start,e.end,e.break,fmtHours(duration(e)),e.eveningHours,e.nightHours,e.saturdayHours,e.sundayHours,e.overtime50Hours,e.overtime100Hours,e.standbyDays,e.calloutHours,e.holidayCalloutHours,e.travelDays,e.notes])];const csv='\ufeff'+rows.map(row=>row.map(value=>`"${String(value??'').replaceAll('"','""')}"`).join(';')).join('\r\n');const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.download=`timer-${dateKey(new Date())}.csv`;link.click();URL.revokeObjectURL(link.href);showToast('Din CSV-fil er klar')});
 addPayslipPanel();
 addPayrollBreakdown();
 addEarningsTabs();
