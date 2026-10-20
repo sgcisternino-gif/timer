@@ -119,8 +119,12 @@ function estimateNet(list) {
 }
 function renderSalary(now=new Date()) {
   const hourly=ordinaryHourlyRate(), today=dateKey(now);
-  const range=getPayPeriodRange(now), currentPeriod=entries.filter(e=>e.date>=range.start&&e.date<=range.end), month=entries.filter(e=>e.date.startsWith(today.slice(0,7))), weekEntries=getWeekEntries(now), totalHours=sum(entries);
-  const scopedEntries=earningsScope==='pay'?currentPeriod:earningsScope==='week'?weekEntries:entries;
+  const range=getPayPeriodRange(now), previousEnd=new Date(`${range.start}T00:00:00`);
+  previousEnd.setDate(previousEnd.getDate()-1);
+  const previousRange=getPayPeriodRange(previousEnd);
+  const currentPeriod=entries.filter(e=>e.date>=range.start&&e.date<=range.end), previousPeriod=entries.filter(e=>e.date>=previousRange.start&&e.date<=previousRange.end), month=entries.filter(e=>e.date.startsWith(today.slice(0,7))), weekEntries=getWeekEntries(now), totalHours=sum(entries);
+  const scopedEntries=earningsScope==='pay'?currentPeriod:earningsScope==='previous-pay'?previousPeriod:earningsScope==='week'?weekEntries:entries;
+  const detailEntries=earningsScope==='previous-pay'?previousPeriod:currentPeriod, detailRange=earningsScope==='previous-pay'?previousRange:range;
   Object.entries(salaryRates).forEach(([key,value])=>{const field=$(`#${key.replace(/[A-Z]/g,letter=>'-'+letter.toLowerCase())}`);if(field){if(field.type==='checkbox')field.checked=Boolean(value);else field.value=value;}});
   $('#pay-earned').textContent=formatMoney(paySum(currentPeriod)); $('#month-earned').textContent=formatMoney(paySum(month)); $('#total-earned').textContent=formatMoney(paySum(entries));
   $('#pay-range-label').textContent=`${dateLabel(range.start,{day:'numeric',month:'short'})} – ${dateLabel(range.end,{day:'numeric',month:'short'})}`;
@@ -136,8 +140,9 @@ function renderSalary(now=new Date()) {
   $('#salary-hours').textContent=`${fmtHours(sum(scopedEntries))} t`; $('#effective-rate').textContent=`${formatMoney(hourly,2)} kr./t · ${formatMoney(sum(scopedEntries)*hourly)} kr.`; $('#extra-earnings').textContent=`${formatMoney(scopedEntries.reduce((total,entry)=>total+extraPay(entry),0))} kr.`; $('#earnings-total').textContent=`${formatMoney(paySum(scopedEntries))} kr.`;
   const fritvalgBase=Math.max(0,paySum(scopedEntries)-(salaryRates.travelTaxable?0:travelPay(scopedEntries)));
   $('#fritvalg-earned').textContent=`${formatMoney(fritvalgBase*Number(salaryRates.fritvalgRate||0)/100)} kr.`;
-  renderPayrollBreakdown(currentPeriod,range);
-  renderPeriodExplanation(currentPeriod,range);
+  renderPayrollBreakdown(detailEntries,detailRange);
+  $('#payroll-breakdown .breakdown-caption').textContent=earningsScope==='previous-pay'?'Detaljer for den forrige lønningsperiode.':'Mængder og vejledende beløb i denne lønningsperiode.';
+  renderPeriodExplanation(detailEntries,detailRange);
   document.querySelectorAll('.earnings-tab').forEach(button=>{button.setAttribute('aria-pressed',String(button.dataset.scope===earningsScope));});
 }
 function renderPayrollBreakdown(periodEntries,range) {
@@ -181,7 +186,7 @@ function addPayrollBreakdown() {
 }
 function addEarningsTabs() {
   const header=document.querySelector('.earnings-panel>.panel-header'),tabs=document.createElement('div');tabs.className='earnings-tabs';tabs.setAttribute('role','group');tabs.setAttribute('aria-label','Vælg tidsrum for din optjening');
-  [['all','I alt'],['pay','Lønperioden'],['week','Denne uge']].forEach(([scope,label])=>{const button=document.createElement('button');button.type='button';button.className='earnings-tab';button.dataset.scope=scope;button.textContent=label;button.setAttribute('aria-pressed',String(scope===earningsScope));button.addEventListener('click',()=>{earningsScope=scope;renderSalary();});tabs.append(button)});
+  [['all','I alt'],['pay','Denne lønperiode'],['previous-pay','Forrige lønperiode'],['week','Denne uge']].forEach(([scope,label])=>{const button=document.createElement('button');button.type='button';button.className='earnings-tab';button.dataset.scope=scope;button.textContent=label;button.setAttribute('aria-pressed',String(scope===earningsScope));button.addEventListener('click',()=>{earningsScope=scope;renderSalary();});tabs.append(button)});
   header.after(tabs);
 }
 function historyRange(filter,anchor=historyAnchor) {
